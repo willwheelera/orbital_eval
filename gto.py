@@ -1,0 +1,273 @@
+# MIT License
+# 
+# Copyright (c) 2019-2024 The PyQMC Developers
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# what should the structure for orbital evaluation look like?
+import numpy as np
+import scipy.special
+from numba import njit, jit
+import hardcoded_spherical_harmonics as hsh
+
+
+@njit(cache=False, fastmath=True)
+def eval_spherical(max_l, rvec):
+    out = np.zeros(((max_l + 1)**2, rvec.shape[0]))
+
+    hsh.HARDCODED_SPH_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, out)
+    tmp = out[1].copy()
+    out[1] = out[3]
+    out[3] = out[2]
+    out[2] = tmp
+    return out
+    
+@njit(cache=False, fastmath=True)
+def eval_spherical_grad(max_l, rvec):
+    out = np.zeros((4, (max_l + 1)**2, rvec.shape[0]))
+    a = np.zeros(((max_l + 1)**2, rvec.shape[0]))
+    b = np.zeros(((max_l + 1)**2, rvec.shape[0]))
+    c = np.zeros(((max_l + 1)**2, rvec.shape[0]))
+    d = np.zeros(((max_l + 1)**2, rvec.shape[0]))
+
+    #hsh.HARDCODED_SPH_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, a)
+    hsh.HARDCODED_SPH_DERIVATIVE_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, a, b, c, d)
+    out[0] = a
+    out[1] = b
+    out[2] = c
+    out[3] = d
+    tmp = out[:, 1].copy()
+    out[:, 1] = out[:, 3]
+    out[:, 3] = out[:, 2]
+    out[:, 2] = tmp
+    return out
+    
+
+@njit
+def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
+    nbas_tot = np.sum(2 * basis_ls + 1)
+    ao = np.zeros((nbas_tot, all_rvec.shape[1]))
+    sel = 0
+    split = 0
+
+    for a, rvec in enumerate(all_rvec):
+        r2 = np.zeros(rvec.shape[0])
+        for e, v in enumerate(rvec):
+            for i in range(3):
+                r2[e] += v[i]**2
+        #r2 = np.sum(rvec**2, axis=-1)
+        spherical = eval_spherical(max_l[a], rvec)
+        # this loops over all basis functions for the atom
+        b_ind = 0
+        for l in basis_ls[l_splits[a]:l_splits[a+1]]:
+            bas = basis_arrays[splits[split]:splits[split+1]]
+            nbas = (2 * l + 1)
+            rad = radial_gto(r2, bas)
+            for b in range(nbas):
+                ao[sel+b_ind] = spherical[l*l+b] * rad
+                b_ind += 1
+            #ao[sel:sel+nbas] += spherical[l**2:(l+1)**2] * rad
+            split += 1
+        sel += b_ind
+    return ao
+
+@njit
+def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
+    nbas_tot = np.sum(2 * basis_ls + 1)
+    ao = np.zeros((4, nbas_tot, all_rvec.shape[1]))
+    sel = 0
+    split = 0
+
+    for a, rvec in enumerate(all_rvec):
+        r2 = np.zeros(rvec.shape[0])
+        for e, v in enumerate(rvec):
+            for i in range(3):
+                r2[e] += v[i]**2
+        #r2 = np.sum(rvec**2, axis=-1)
+        spherical = eval_spherical_grad(max_l[a], rvec)
+        # this loops over all basis functions for the atom
+        b_ind = 0
+        for l in basis_ls[l_splits[a]:l_splits[a+1]]:
+            bas = basis_arrays[splits[split]:splits[split+1]]
+            nbas = (2 * l + 1)
+            rad = radial_gto_grad(r2, rvec, bas)
+            for b in range(nbas):
+                ao[0, sel+b_ind] = spherical[0, l*l+b] * rad[0]
+                for i in range(1, 4):
+                    ao[i, sel+b_ind] = spherical[i, l*l+b] * rad[0] + spherical[0, l*l+b] * rad[i]
+                b_ind += 1
+            #ao[sel:sel+nbas] += spherical[l**2:(l+1)**2] * rad
+            split += 1
+        sel += b_ind
+    return ao
+
+
+@njit("float64[:](float64[:], float64[:, :])", fastmath=True)
+def radial_gto(r2, coeffs):
+    """
+    r: (n, ..., 1)
+    coeffs: (ncontract, 2)
+    l: int
+    returns (n, ...)"""
+    out = np.zeros_like(r2)
+    for c in coeffs:
+        out += np.exp(-r2 * c[0]) * c[1]
+    return out
+
+
+@njit(fastmath=True)
+#@njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)
+def radial_gto_grad(r2, rvec, coeffs):
+    out = np.zeros((4, r2.shape[0]))
+    for c in coeffs:
+        tmp = np.exp(-r2 * c[0]) * c[1]
+        out[0] += tmp
+        for i in range(3):
+            out[i+1] +=  -tmp * c[0] * 2 * rvec[:, i]
+    return out
+
+@njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)
+def radial_gto_lap(r2, rvec, coeffs):
+    out = np.zeros((7, r2.shape[0]))
+    for c in coeffs:
+        tmp = np.exp(-r2 * c[0]) * c[1]
+        out[0] += tmp
+        tmpx2xc = tmp * 2 * c[0]
+        for i in range(3):
+            x = rvec[:, i]
+            out[i+1] +=  -tmpx2xc * x
+            out[i+4] +=  tmpx2xc * (2*c[0] *x*x - 1)
+    return out
+
+ 
+def compute_basis_norms(basis):
+    """
+    https://pyscf.org/pyscf_api_docs/pyscf.gto.html#pyscf.gto.mole.gto_norm
+    z = l+1
+    N^2 = gamma(2z) / gamma(z) * np.pi**.5 / (2**(2z+1) * (2a)**(z+.5))
+    H. B. Schlegel and M. J. Frisch, Int. J. Quant. Chem., 54(1995), 83-87.
+
+    https://en.wikipedia.org/wiki/Gamma_function#Properties
+    gamma(2z) / gamma(z) = gamma(z + 1/2) / (2**(1-2*z) * np.pi**.5)
+
+    plug in:
+    N^2 = gamma(z + 1/2) / (2**(2z+1) * (2a)**(z+.5) * 2**(1-2z))
+        = gamma(z + 1/2) / (4 * (2a)**(z+1/2))
+    m = z + .5 = l + 1.5
+    N^2 = gamma(m) / (4 * (2*a)**m)
+    """
+     
+    basis_norms = []
+    for l, coeffs in basis:
+        m = l + 1.5
+        b = 2 * coeffs[:, 0]
+        norm = np.sqrt(2 * b ** m / scipy.special.gamma(m))
+        basis_norms.append(norm)
+    return basis_norms
+            
+
+
+@njit
+def mol_cutoffs(basis_ls, basis_arrays, splits, l_splits, expcutoff=20):
+    natom = len(l_splits) - 1
+
+    split = 0
+    atom_cutoff = np.zeros(natom)
+    l_cutoff = np.zeros(len(basis_ls))
+    for a in range(natom):
+        for i, l in enumerate(basis_ls[l_splits[a]:l_splits[a+1]]):
+            bas = basis_arrays[splits[split]:splits[split+1]]
+            log_c = np.log(np.abs(bas[:, 1]))
+            if l==0:
+                l_cutoff[l_splits[a]+i] = np.amax((expcutoff + log_c) / bas[:, 0])
+            else:
+                r2sup = .5 * l / np.amin(bas[:, 0])
+                lconst = .5 * np.log(r2sup) * l 
+                l_cutoff[l_splits[a]+i] = np.amax((expcutoff + log_c + lconst) / bas[:, 0])
+            atom_cutoff[a] = max(atom_cutoff[a], l_cutoff[l_splits[a]+i])
+            split += 1
+    return atom_cutoff, l_cutoff
+
+
+class AtomicOrbitalEvaluator:
+    def __init__(self, mol, expcutoff=15):
+        # Need atom coords, basis set
+        self.atom_coords = mol.atom_coords()
+        natom = len(self.atom_coords)
+        self.atom_names = [mol.atom_pure_symbol(i) for i in range(natom)]
+        list2arr = lambda v: [[x[0], np.array(x[1:])] for x in v]
+
+        basis_ls = {}
+        basis_arrays = {}
+        _splits = {}
+        self.basis_norms = {}
+        for k, v in mol._basis.items():
+            array_basis = list2arr(v)# for k, v in mol._basis.items()}
+            ls, bases = list(zip(*array_basis))
+            basis_ls[k] = np.asarray(ls)
+            basis_norms = compute_basis_norms(array_basis)
+            self.basis_norms[k]=basis_norms
+            for bas, norm in zip(bases, basis_norms):
+                bas[:, 1] *= norm
+            _splits[k] = np.array([len(b) for b in bases])
+            basis_arrays[k] = np.concatenate(bases, axis=0)
+        max_l = {k: np.amax(zip(*v).__next__()) for k, v in mol._basis.items()}
+
+        
+        self.basis_ls = np.concatenate([basis_ls[atom] for atom in self.atom_names])
+        self.basis_arrays = np.concatenate([basis_arrays[atom] for atom in self.atom_names])
+        splits = np.concatenate([[0]] + [_splits[atom] for atom in self.atom_names])
+        self.splits = np.cumsum(splits)
+        self.max_l = np.asarray([max_l[atom] for atom in self.atom_names])
+        #self.nbas_atom = np.asarray([np.sum(2 * ls + 1) for ls in self.basis_ls])
+        self.l_splits = np.cumsum([0] + [len(basis_ls[atom]) for atom in self.atom_names])
+        #self.nbas = np.sum(self.nbas_atom)
+
+        self.atom_cutoff, self.l_cutoff = mol_cutoffs(
+            self.basis_ls, 
+            self.basis_arrays, 
+            self.splits, 
+            self.l_splits, 
+            expcutoff=expcutoff,
+        )
+
+    def eval_gto(self, configs):
+        """
+        configs is (n, 3)
+        """
+        # (natom, nconf, 3)
+        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
+        ao = mol_eval_gto(
+            rvec,
+            self.basis_ls, 
+            self.basis_arrays,
+            self.max_l,
+            self.splits,
+            self.l_splits,
+        )
+        return ao.T
+
+    def eval_gto_grad(self, configs):
+        """
+        configs is (n, 3)
+        """
+        # (natom, nconf, 3)
+        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
+        ao = mol_eval_gto_grad(
+            rvec,
+            self.basis_ls, 
+            self.basis_arrays,
+            self.max_l,
+            self.splits,
+            self.l_splits,
+        )
+        return np.transpose(ao, (0, 2, 1))
+            
