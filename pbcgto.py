@@ -135,7 +135,7 @@ def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cu
                 if r2 > r2_l_cutoff[l_split_a+l_ind]: 
                     b_ind += 2*l+1
                     continue
-                rad = gto.single_radial_gto(r2, basis_a[l_ind])
+                rad = single_radial_gto(r2, basis_a[l_ind])
                 for b in range(2*l+1):
                     ao[0, e, astart+b_ind] += spherical[l*l+b] * rad
                     b_ind += 1
@@ -167,6 +167,18 @@ def _pbc_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls,
                 sel += nbas
                 split += 1
     return ao
+
+@njit("float64(float64, float64[:, :])", fastmath=True)
+def single_radial_gto(r2, coeffs):
+    """
+    r: (n, ..., 1)
+    coeffs: (ncontract, 2)
+    l: int
+    returns (n, ...)"""
+    out = 0.
+    for c in coeffs:
+        out += np.exp(-r2 * c[0]) * c[1]
+    return out
 
 
 @njit
