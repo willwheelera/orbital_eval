@@ -21,6 +21,11 @@ import hardcoded_spherical_harmonics as hsh
 
 @njit(cache=False, fastmath=True)
 def eval_spherical(max_l, rvec):
+    """
+    evaluate spherical harmonics up to angular momentum max_l
+    max_l: (int)
+    rvec: (nvec, 3) points to evaluate at
+    """
     out = np.zeros(((max_l + 1)**2, rvec.shape[0]))
 
     hsh.HARDCODED_SPH_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, out)
@@ -32,6 +37,11 @@ def eval_spherical(max_l, rvec):
     
 @njit(cache=False, fastmath=True)
 def eval_spherical_grad(max_l, rvec):
+    """
+    evaluate spherical harmonic gradients up to angular momentum max_l
+    max_l: (int)
+    rvec: (nvec, 3) points to evaluate at
+    """
     out = np.zeros((4, (max_l + 1)**2, rvec.shape[0]))
     a = np.zeros(((max_l + 1)**2, rvec.shape[0]))
     b = np.zeros(((max_l + 1)**2, rvec.shape[0]))
@@ -53,6 +63,14 @@ def eval_spherical_grad(max_l, rvec):
 
 @njit
 def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
+    """
+    all_rvec: (natom, nelec, 3) atom-electron distances
+    basis_ls: (ncontractions,) l value for every Gaussian contraction (concatenated together)
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions (concatenated together)
+    max_l: (natom,) max angular momentum l for each atom
+    splits: (ncontractions+1,) indexing for basis_arrays
+    l_splits: (natom+1,) indexing for basis_ls
+    """
     nbas_tot = np.sum(2 * basis_ls + 1)
     ao = np.zeros((nbas_tot, all_rvec.shape[1]))
     sel = 0
@@ -81,6 +99,14 @@ def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
 
 @njit
 def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
+    """
+    all_rvec: (natom, nelec, 3) atom-electron distances
+    basis_ls: (ncontractions,) l value for every Gaussian contraction (concatenated together)
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions (concatenated together)
+    max_l: (natom,) max angular momentum l for each atom
+    splits: (ncontractions+1,) indexing for basis_arrays
+    l_splits: (natom+1,) indexing for basis_ls
+    """
     nbas_tot = np.sum(2 * basis_ls + 1)
     ao = np.zeros((4, nbas_tot, all_rvec.shape[1]))
     sel = 0
@@ -113,19 +139,25 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
 @njit("float64[:](float64[:], float64[:, :])", fastmath=True)
 def radial_gto(r2, coeffs):
     """
-    r: (n, ..., 1)
+    Evaluate gaussian contraction (vectorized for molecules)
+    r: (n, )
     coeffs: (ncontract, 2)
     l: int
-    returns (n, ...)"""
+    returns (n, )"""
     out = np.zeros_like(r2)
     for c in coeffs:
         out += np.exp(-r2 * c[0]) * c[1]
     return out
 
 
-@njit(fastmath=True)
-#@njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)
+@njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)
 def radial_gto_grad(r2, rvec, coeffs):
+    """
+    Evaluate gaussian contraction gradient (vectorized for molecules)
+    r: (n, )
+    coeffs: (ncontract, 2)
+    l: int
+    returns (4, n, )"""
     out = np.zeros((4, r2.shape[0]))
     for c in coeffs:
         tmp = np.exp(-r2 * c[0]) * c[1]
@@ -136,6 +168,12 @@ def radial_gto_grad(r2, rvec, coeffs):
 
 @njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)
 def radial_gto_lap(r2, rvec, coeffs):
+    """
+    Evaluate gaussian contraction laplacian (vectorized for molecules)
+    r: (n, )
+    coeffs: (ncontract, 2)
+    l: int
+    returns (4, n, )"""
     out = np.zeros((7, r2.shape[0]))
     for c in coeffs:
         tmp = np.exp(-r2 * c[0]) * c[1]
@@ -151,6 +189,7 @@ def radial_gto_lap(r2, rvec, coeffs):
 def compute_basis_norms(basis):
     """
     https://pyscf.org/pyscf_api_docs/pyscf.gto.html#pyscf.gto.mole.gto_norm
+    Compute normalization constants for each Gaussian coefficient
     z = l+1
     N^2 = gamma(2z) / gamma(z) * np.pi**.5 / (2**(2z+1) * (2a)**(z+.5))
     H. B. Schlegel and M. J. Frisch, Int. J. Quant. Chem., 54(1995), 83-87.
@@ -177,6 +216,9 @@ def compute_basis_norms(basis):
 
 @njit
 def mol_cutoffs(basis_ls, basis_arrays, splits, l_splits, expcutoff=20):
+    """
+    compute cutoffs for Gaussian exponent. not used for molecules now.
+    """
     natom = len(l_splits) - 1
 
     split = 0

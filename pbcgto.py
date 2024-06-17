@@ -26,9 +26,14 @@ import gto
 
 @njit(cache=False, fastmath=True)
 def sph2(v, out):
+    """
+    evaluate spherical harmonics through l=2
+    v: (3,) vector to evaluate
+    out: (3**2,) output array
+    """
     #out = np.zeros(9)
     hsh.SPH2(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
-    tmp = out[1]
+    tmp = out[1] # the code I found uses the wrong p-orbital order
     out[1] = out[3]
     out[3] = out[2]
     out[2] = tmp
@@ -37,6 +42,11 @@ def sph2(v, out):
 
 @njit(cache=False, fastmath=True)
 def sph3(v, out):
+    """
+    evaluate spherical harmonics through l=3
+    v: (3,) vector to evaluate
+    out: (4**2,) output array
+    """
     #out = np.zeros(16)
     hsh.SPH3(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
     tmp = out[1]
@@ -48,6 +58,11 @@ def sph3(v, out):
 
 @njit(cache=False, fastmath=True)
 def sph4(v, out):
+    """
+    evaluate spherical harmonics through l=4
+    v: (3,) vector to evaluate
+    out: (5**2,) output array
+    """
     #out = np.zeros(25)
     hsh.SPH4(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
     tmp = out[1]
@@ -59,6 +74,11 @@ def sph4(v, out):
 
 @njit(cache=False, fastmath=True)
 def sph5(v, out):
+    """
+    evaluate spherical harmonics through l=5
+    v: (3,) vector to evaluate
+    out: (6**2,) output array
+    """
     #out = np.zeros(36)
     hsh.SPH5(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
     tmp = out[1]
@@ -71,6 +91,18 @@ def sph5(v, out):
 
 @njit(fastmath=True)
 def _pbc_eval_gto_gamma(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls, num_Ls, r2_l_cutoff, r2_cutoff, kpts=None):
+    """
+    all_rvec: (natom, nelec, 3) atom-electron distances
+    basis_ls: (ncontractions,) l value for every Gaussian contraction (concatenated together)
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions (concatenated together)
+    max_l: (natom,) max angular momentum l for each atom
+    splits: (ncontractions+1,) indexing for basis_arrays
+    l_splits: (natom+1,) indexing for basis_ls
+    Ls: (nL, 3) list of (sorted) lattice points to sum over
+    num_Ls: (natom,) number of Ls to check for each atom
+    r2_l_cutoff: (ncontractions,) distance cutoff for each contraction
+    r2_cutoff: (natoms,) distance cutoff for each atom
+    """
     natom, nelec = all_rvec.shape[:2]
     nbas_tot = np.sum(2 * basis_ls + 1)
     ao = np.zeros((1, all_rvec.shape[1], nbas_tot))
@@ -108,6 +140,20 @@ def _pbc_eval_gto_gamma(all_rvec, basis_ls, basis_arrays, max_l, splits, l_split
 
 @njit(fastmath=True)
 def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cut, astart, max_l):
+    """
+    Calculate basis functions for one atom
+
+    ao: (1, nelec, nao) output array
+    rvec: (nelec, 3) atom-electron distances
+    basis_ls_a: (ncontractions,) l value for every Gaussian contraction in this atom's basis
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions in this atom's basis
+    l_split_a: (int) starting index for r_l_cutoff
+    Ls_a: (nL, 3) list of (sorted) lattice points to check for this atom
+    r2_l_cutoff: (ncontractions,) distance cutoff for each contraction
+    cut: (float) distance cutoff for this atom
+    astart: (int) starting index for ao
+    max_l: (int) max angular momentum l for this atom
+    """
     if max_l == 2: sph_func = sph2#hsh.SPH2
     elif max_l == 3: sph_func = sph3#hsh.SPH3
     elif max_l == 4: sph_func = sph4#hsh.SPH4
@@ -143,6 +189,10 @@ def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cu
 
 #@njit
 def _pbc_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls, kpts):
+    """
+    Needs to be updated to the gamma version
+    Calculate aos for nonzero kpts
+    """
     nbas_tot = np.sum(2 * basis_ls + 1)
     ao = np.zeros((len(kpts), nbas_tot, all_rvec.shape[1]), dtype=complex)
 
@@ -183,6 +233,9 @@ def single_radial_gto(r2, coeffs):
 
 @njit
 def max_distance_in_cell(lvecs):
+    """
+    calculate the maximum possible distance in the cell to estimate how many Ls are needed
+    """
     combos = np.array([[1., 1., 1.],
                        [-1., 1., 1.],
                        [1., -1., 1.],
@@ -195,6 +248,10 @@ def max_distance_in_cell(lvecs):
 
 @njit
 def calc_num_Ls(rvec, Ls, basis_arrays, basis_ls, splits, l_splits, expcutoff):
+    """
+    Not used
+    Calculate number of Ls to sum over for a particular rvec
+    """
     res = np.ones(len(splits), dtype=np.int64)
     r2 = np.zeros(rvec.shape[1])
     split = 0
@@ -217,6 +274,15 @@ def calc_num_Ls(rvec, Ls, basis_arrays, basis_ls, splits, l_splits, expcutoff):
 
 @njit
 def max_Ls(Ls, lvecs, basis_ls, basis_arrays, splits, l_splits, expcutoff=20):
+    """
+    Ls: (nL, 3) list of (sorted) lattice points to check
+    lvecs: (3, 3) lattice vectors
+    basis_ls: (ncontractions,) l value for every Gaussian contraction (concatenated together)
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions (concatenated together)
+    splits: (ncontractions+1,) indexing for basis_arrays
+    l_splits: (natom+1,) indexing for basis_ls
+    expcutoff: (float) value of exponent to cut off Gaussian evaluation
+    """
     natom = len(l_splits) - 1
     Lmax = np.zeros(len(splits)-1, dtype=np.int32)
     Lmax_a = np.zeros(natom, dtype=np.int32)
