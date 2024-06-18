@@ -100,15 +100,15 @@ def COMPUTE_SPH_DERIVATIVE_L1(
     dy_sph_i,
     dz_sph_i,
 ):
-    dz_sph_i[(1)] = 0.0
-    dz_sph_i[(2)] = 0.0
-    dz_sph_i[(3)] = 0.48860251190292
-    dx_sph_i[(1)] = 0.48860251190292
+    dx_sph_i[(1)] = 0.0
     dx_sph_i[(2)] = 0.0
-    dx_sph_i[(3)] = 0.0
-    dy_sph_i[(1)] = 0.0
-    dy_sph_i[(2)] = 0.48860251190292
+    dx_sph_i[(3)] = 0.48860251190292
+    dy_sph_i[(1)] = 0.48860251190292
+    dy_sph_i[(2)] = 0.0
     dy_sph_i[(3)] = 0.0
+    dz_sph_i[(1)] = 0.0
+    dz_sph_i[(2)] = 0.48860251190292
+    dz_sph_i[(3)] = 0.0
 
 
 @njit(fastmath=True, cache=True)
