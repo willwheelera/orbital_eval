@@ -43,21 +43,15 @@ def eval_spherical_grad(max_l, rvec):
     rvec: (nvec, 3) points to evaluate at
     """
     out = np.zeros((4, (max_l + 1)**2, rvec.shape[0]))
-    a = np.zeros(((max_l + 1)**2, rvec.shape[0]))
-    b = np.zeros(((max_l + 1)**2, rvec.shape[0]))
-    c = np.zeros(((max_l + 1)**2, rvec.shape[0]))
-    d = np.zeros(((max_l + 1)**2, rvec.shape[0]))
+    a, b, c, d = out
 
     #hsh.HARDCODED_SPH_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, a)
     hsh.HARDCODED_SPH_DERIVATIVE_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, a, b, c, d)
-    out[0] = a
-    out[1] = b
-    out[2] = c
-    out[3] = d
-    tmp = out[:, 1].copy()
-    out[:, 1] = out[:, 3]
-    out[:, 3] = out[:, 2]
-    out[:, 2] = tmp
+    out = np.transpose(out, (1, 0, 2))
+    tmp = out[ 1].copy()
+    out[ 1] = out[ 3]
+    out[ 3] = out[ 2]
+    out[ 2] = tmp
     return out
     
 
@@ -108,7 +102,7 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
     l_splits: (natom+1,) indexing for basis_ls
     """
     nbas_tot = np.sum(2 * basis_ls + 1)
-    ao = np.zeros((4, nbas_tot, all_rvec.shape[1]))
+    ao = np.zeros((nbas_tot, 4, all_rvec.shape[1]))
     sel = 0
     split = 0
 
@@ -126,13 +120,13 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
             nbas = (2 * l + 1)
             rad = radial_gto_grad(r2, rvec, bas)
             for b in range(nbas):
-                ao[0, sel+b_ind] = spherical[0, l*l+b] * rad[0]
+                ao[sel+b_ind, 0] = spherical[l*l+b, 0] * rad[0]
                 for i in range(1, 4):
-                    ao[i, sel+b_ind] = spherical[i, l*l+b] * rad[0] + spherical[0, l*l+b] * rad[i]
+                    ao[sel+b_ind, i] = spherical[l*l+b, i] * rad[0] + spherical[l*l+b, 0] * rad[i]
                 b_ind += 1
             split += 1
         sel += b_ind
-    return ao
+    return np.transpose(ao, (1, 0, 2))
 
 
 @njit("float64[:](float64[:], float64[:, :])", fastmath=True)
@@ -153,7 +147,8 @@ def radial_gto(r2, coeffs):
 def radial_gto_grad(r2, rvec, coeffs):
     """
     Evaluate gaussian contraction gradient (vectorized for molecules)
-    r: (n, )
+    r2: (n, )
+    rvec: (n, 3)
     coeffs: (ncontract, 2)
     l: int
     returns (4, n, )"""
