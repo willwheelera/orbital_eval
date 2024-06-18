@@ -130,7 +130,6 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
                 for i in range(1, 4):
                     ao[i, sel+b_ind] = spherical[i, l*l+b] * rad[0] + spherical[0, l*l+b] * rad[i]
                 b_ind += 1
-            #ao[sel:sel+nbas] += spherical[l**2:(l+1)**2] * rad
             split += 1
         sel += b_ind
     return ao
