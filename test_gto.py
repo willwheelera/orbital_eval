@@ -1,7 +1,6 @@
 import pyscf.gto
-from pyqmc.coord import OpenConfigs
+from pyqmc.coord import OpenConfigs, PeriodicConfigs
 import numpy as np
-import gto
 
 def test_gradient(fval, fgrad, delta=1e-5):
     rvec = np.asarray(np.random.randn(50, 3)) 
@@ -22,9 +21,8 @@ def test_gradient(fval, fgrad, delta=1e-5):
     return (maxerror)
 
 
-def run_tests():
-    sph_funcs = [lambda x: gto.eval_spherical(max_l, x).sum(axis=0) for max_l in [2, 3, 4, 5]]
-    sph_grads = [lambda x: gto.eval_spherical_grad(max_l, x).sum(axis=1)[1:] for max_l in [2, 3, 4, 5]]
+def run_tests(bc="molecule"):
+    print("boundary conditions", bc)
     coeffs = []
     coeffs.append(np.array([[0.2, 1.]]))
     coeffs.append(np.array([[1.7, 1.]]))
@@ -56,22 +54,40 @@ def run_tests():
         [0.170907, 0.256056],
         [0.086794, 0.541482],
     ]))
-    rad_funcs = [lambda x: gto.radial_gto(np.sum(x**2, axis=-1), c) for c in coeffs]
-    rad_grads = [lambda x: gto.radial_gto_grad(np.sum(x**2, axis=-1), x, c)[1:] for c in coeffs]
+    if bc == "molecule":
+        import gto
+        sph_funcs = [lambda x: gto.eval_spherical(max_l, x).sum(axis=0) for max_l in [2, 3, 4, 5]]
+        sph_grads = [lambda x: gto.eval_spherical_grad(max_l, x).sum(axis=1)[1:] for max_l in [2, 3, 4, 5]]
+        rad_funcs = [lambda x: gto.radial_gto(np.sum(x**2, axis=-1), c) for c in coeffs]
+        rad_grads = [lambda x: gto.radial_gto_grad(np.sum(x**2, axis=-1), x, c)[1:] for c in coeffs]
+    else:
+        import pbcgto as gto
+        sph_funcs = [gto.sph2, gto.sph3, gto.sph4, gto.sph5]
+        sph_grads = [gto.sph2_grad, gto.sph3_grad, gto.sph4_grad, gto.sph5_grad]
+        rad_funcs = [lambda x: gto.single_radial_gto(np.sum(x**2, axis=-1), c) for c in coeffs]
+        rad_grads = [lambda x: gto.single_radial_gto_grad(np.sum(x**2, axis=-1), x, c)[1:] for c in coeffs]
 
-    print("spherical")
-    for sval, sgrad in zip(sph_funcs, sph_grads):
-        err = np.amax([test_gradient(sval, sgrad, d) for d in (1e-5, 1e-6, 1e-7)])
-        print(err)
-    print("radial")
-    for rval, rgrad in zip(rad_funcs, rad_grads):
-        err = np.amax([test_gradient(rval, rgrad, d) for d in (1e-5, 1e-6, 1e-7)])
-        print(err)
+    if bc == "molecule":
+        print("spherical")
+        for sval, sgrad in zip(sph_funcs, sph_grads):
+            err = np.amax([test_gradient(sval, sgrad, d) for d in (1e-5, 1e-6, 1e-7)])
+            print(err)
+        print("radial")
+        for rval, rgrad in zip(rad_funcs, rad_grads):
+            err = np.amax([test_gradient(rval, rgrad, d) for d in (1e-5, 1e-6, 1e-7)])
+            print(err)
     
-    mol = pyscf.gto.M(atom="Mn 0. 0. 0.; N 0. 0. 2.5", ecp="ccecp", basis="ccecp-ccpvtz", unit="B", spin=0)
-    orbitals = gto.AtomicOrbitalEvaluator(mol)
-    orbval = lambda x: orbitals.eval_gto(OpenConfigs(x))
-    orbgrad = lambda x: orbitals.eval_gto_grad(OpenConfigs(x))[1:]
+    if bc == "molecule":
+        mol = pyscf.gto.M(atom="Mn 0. 0. 0.; N 0. 0. 2.5", ecp="ccecp", basis="ccecp-ccpvtz", unit="B", spin=0)
+        orbitals = gto.AtomicOrbitalEvaluator(mol)
+        configs = lambda x: OpenConfigs(x)
+    else:
+        from time_gto_pbc import generate_mol
+        mol = generate_mol()
+        orbitals = gto.PeriodicAtomicOrbitalEvaluator(mol)
+        configs = lambda x: PeriodicConfigs(x, mol.lattice_vectors())
+    orbval = lambda x: orbitals.eval_gto(configs(x))[0]
+    orbgrad = lambda x: orbitals.eval_gto_grad(configs(x))[0, 1:]
     print("orbitals")
     print(test_gradient(orbval, orbgrad))
     #err = np.amax([test_gradient(orbval, orbgrad, d) for d in (1e-5, 1e-6, 1e-7)])
@@ -79,4 +95,4 @@ def run_tests():
 
 
 if __name__ == "__main__":
-    run_tests()
+    run_tests("pbc")
