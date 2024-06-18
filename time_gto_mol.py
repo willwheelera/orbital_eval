@@ -36,9 +36,9 @@ def compare_pyscf():
     coords = np.random.randn(n, 3) + np.array([0, 0, 0.5])
     orbitals = AtomicOrbitalEvaluator(mol)
 
-    f1 = lambda c: mol.eval_gto("GTOval_sph", c)
+    f1 = lambda c: mol.eval_gto("GTOval_sph_deriv1", c)
     # compile functions
-    ao1 = orbitals.eval_gto(OpenConfigs(coords))
+    ao1 = orbitals.eval_gto_grad(OpenConfigs(coords))
     ao0 = f1(coords)
 
     N = 20
@@ -47,7 +47,7 @@ def compare_pyscf():
         coords = np.random.randn(n, 3)*2 + np.array([0, 0, 0.5])
         configs = OpenConfigs(coords)
         tpys = timecall(f1, coords)
-        tpyq = timecall(orbitals.eval_gto, configs)
+        tpyq = timecall(orbitals.eval_gto_grad, configs)
         dat["pyscf"][i] = tpys
         dat["new"][i] = tpyq
 
@@ -57,17 +57,17 @@ def printout(mol, ao0, ao1, dat):
     print("pyscf", ao0.shape)
     print("python", ao1.shape)
     df = {"label": mol.ao_labels()}
-    args = (np.argmax(np.abs(ao1-ao0), axis=0), range(ao0.shape[1]))
-    j = 0
-    df["ao0"] = ao0[args]
-    df["ao1"] = ao1[args]
-    df["ao1/ao0"] = ao1[args] / ao0[args]
-    df["ao0/ao1"] = ao0[args] / ao1[args]
-    df["diff"] = ao1[args] - ao0[args]
-    df = pd.DataFrame(df)
+    #args = (np.argmax(np.abs(ao1-ao0), axis=0), range(ao0.shape[1]))
+    #j = 0
+    #df["ao0"] = ao0[args]
+    #df["ao1"] = ao1[args]
+    #df["ao1/ao0"] = ao1[args] / ao0[args]
+    #df["ao0/ao1"] = ao0[args] / ao1[args]
+    #df["diff"] = ao1[args] - ao0[args]
+    #df = pd.DataFrame(df)
+    #print(df[:50])
+    #print(df[50:])
     diff_norm = np.linalg.norm(ao0-ao1)
-    print(df[:50])
-    print(df[50:])
     print("max diff", np.amax(np.abs(ao1-ao0)))
     eps = 0.01
     print(f"greater than {eps}", np.count_nonzero(np.abs(ao1-ao0)>eps))
