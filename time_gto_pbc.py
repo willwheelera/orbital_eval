@@ -18,20 +18,11 @@ import scipy.special
 from numba import njit
 from pbcgto import PeriodicAtomicOrbitalEvaluator
 from time_gto_mol import printout
+from pyscf.pbc import gto
 
 precision = 1e-2
-def compare_pbc_pyscf():
-    # Test
-    from pyscf.pbc import gto
-    from pyqmc.coord import PeriodicConfigs
-    from pyqmc.pbc import enforce_pbc
-    import pandas as pd
-    import time
-    def timecall(f, *args):
-        t0 = time.perf_counter()
-        f(*args)
-        return time.perf_counter() - t0
 
+def generate_mol():
     L = 4.168
     pos = np.array([
         [0, 0, 0],
@@ -52,15 +43,29 @@ def compare_pbc_pyscf():
         spin=0,
         precision=precision,
     )
+    return mol
 
+
+def compare_pbc_pyscf():
+    # Test
+    from pyqmc.coord import PeriodicConfigs
+    from pyqmc.pbc import enforce_pbc
+    import pandas as pd
+    import time
+    def timecall(f, *args):
+        t0 = time.perf_counter()
+        f(*args)
+        return time.perf_counter() - t0
+
+    mol = generate_mol()
     lvecs = mol.lattice_vectors()
     n = 500
     coords, _ = enforce_pbc(lvecs, np.random.randn(n, 3)*2 + np.array([0, 0, 0.5]))
     orbitals = PeriodicAtomicOrbitalEvaluator(mol, kpts=np.zeros((1, 3)), eval_gto_precision=precision)
-    f1 = lambda c: np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph", c, kpts=np.zeros((1, 3)), Ls=orbitals.Ls))
+    f1 = lambda c: np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph_deriv1", c, kpts=np.zeros((1, 3)), Ls=orbitals.Ls))
             
     # compile functions
-    ao1 = orbitals.eval_gto(PeriodicConfigs(coords, mol.lattice_vectors()))[0]
+    ao1 = orbitals.eval_gto_grad(PeriodicConfigs(coords, mol.lattice_vectors()))[0]
     ao0 = f1(coords)[0]
     print("compiled", flush=True)
 
