@@ -32,13 +32,23 @@ def compare_pbc_pyscf():
         f(*args)
         return time.perf_counter() - t0
 
-
+    L = 4.168
+    pos = np.array([
+        [0, 0, 0],
+        [0, 1, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 0, 1],
+        [0, 1, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+    ]) * 0.5 * L
     mol = gto.M(
-        atom="Fe 0. 0. 0.; O 1. 1. 1.", 
-        a=np.eye(3)*4,
+        atom=[("Ni", r) for r in pos[:4]] + [("O", r) for r in pos[4:]],
+        a=np.eye(3)*L,
         ecp="ccecp", 
         basis="ccecp-ccpvtz", 
-        unit="B", 
+        unit="A", 
         spin=0,
         precision=precision,
     )
