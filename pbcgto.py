@@ -221,10 +221,10 @@ def _pbc_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls,
 @njit("float64(float64, float64[:, :])", fastmath=True)
 def single_radial_gto(r2, coeffs):
     """
-    r: (n, ..., 1)
+    r2: float
     coeffs: (ncontract, 2)
     l: int
-    returns (n, ...)"""
+    returns: float"""
     out = 0.
     for c in coeffs:
         out += np.exp(-r2 * c[0]) * c[1]
