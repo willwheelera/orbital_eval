@@ -62,11 +62,15 @@ def compare_pbc_pyscf():
     n = 500
     coords, _ = enforce_pbc(lvecs, np.random.randn(n, 3)*2 + np.array([0, 0, 0.5]))
     orbitals = PeriodicAtomicOrbitalEvaluator(mol, kpts=np.zeros((1, 3)), eval_gto_precision=precision)
-    f1 = lambda c: np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph_deriv1", c, kpts=np.zeros((1, 3)), Ls=orbitals.Ls))
+    #f1 = lambda c: np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph_deriv1", c, kpts=np.zeros((1, 3)), Ls=orbitals.Ls))
+    def f1(c): 
+        x = np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph_deriv2", c, kpts=np.zeros((1, 3)), Ls=orbitals.Ls))
+        lap = np.sum(x[0, [4, 7, 9]], axis=0, keepdims=True)
+        return np.concatenate([x[0, :4], lap], axis=0)
             
     # compile functions
-    ao1 = orbitals.eval_gto_grad(PeriodicConfigs(coords, mol.lattice_vectors()))[0]
-    ao0 = f1(coords)[0]
+    ao1 = orbitals.eval_gto_lap(PeriodicConfigs(coords, mol.lattice_vectors()))[0]
+    ao0 = f1(coords)#[0]
     print("compiled", flush=True)
 
     # timing
@@ -76,7 +80,7 @@ def compare_pbc_pyscf():
         coords, _ = enforce_pbc(lvecs, np.random.randn(n, 3)*2 + np.array([0, 0, 0.5]))
         configs = PeriodicConfigs(coords, mol.lattice_vectors())
         tpys = timecall(f1, coords)
-        tpyq = timecall(orbitals.eval_gto, configs)
+        tpyq = timecall(orbitals.eval_gto_lap, configs)
         dat["pyscf"][i] = tpys
         dat["new"][i] = tpyq
         print("rep ", i)
