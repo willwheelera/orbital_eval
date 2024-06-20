@@ -20,7 +20,8 @@ from pyqmc.orbitals import _estimate_rcut
 from pyscf.pbc.gto.cell import estimate_rcut, _extract_pgto_params
 from pyscf.pbc.gto.cell import _estimate_rcut as _estimate_rcut_pyscf
 from pyscf.gto import mole
-import hardcoded_spherical_harmonics as hsh
+#import hardcoded_spherical_harmonics as hsh
+import modified_spherical_harmonics as hsh
 import gto
 #from gto import sph2, sph3, sph4, sph5
 
@@ -281,6 +282,109 @@ def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutof
                     b_ind += 1
 
 
+@njit(fastmath=True)
+def _pbc_eval_gto_gamma_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls, num_Ls, r2_l_cutoff, r2_cutoff, kpts=None):
+    """
+    all_rvec: (natom, nelec, 3) atom-electron distances
+    basis_ls: (ncontractions,) l value for every Gaussian contraction (concatenated together)
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions (concatenated together)
+    max_l: (natom,) max angular momentum l for each atom
+    splits: (ncontractions+1,) indexing for basis_arrays
+    l_splits: (natom+1,) indexing for basis_ls
+    Ls: (nL, 3) list of (sorted) lattice points to sum over
+    num_Ls: (natom,) number of Ls to check for each atom
+    r2_l_cutoff: (ncontractions,) distance cutoff for each contraction
+    r2_cutoff: (natoms,) distance cutoff for each atom
+    """
+    natom, nelec = all_rvec.shape[:2]
+    nbas_tot = np.sum(2 * basis_ls + 1)
+    ao = np.zeros((1, all_rvec.shape[1], nbas_tot, 5))
+
+    atom_start = np.zeros(natom+1, dtype=np.int32)
+    basis_ = []
+    bstart = 0
+    for a in range(natom):
+        basis_ls_a = basis_ls[l_splits[a]:l_splits[a+1]]
+        tmp_bas = []
+        atom_start[a+1] = atom_start[a]
+        for l_ind, l in enumerate(basis_ls_a):
+            split = bstart + l_ind
+            tmp_bas.append(basis_arrays[splits[split]:splits[split+1]])
+            atom_start[a+1] += 2 * l + 1
+        basis_.append(tmp_bas)
+        bstart += len(basis_ls_a)
+
+    for a, rvec in enumerate(all_rvec):
+        basis_ls_a = basis_ls[l_splits[a]:l_splits[a+1]]
+        _single_atom_lap(
+            ao, 
+            rvec, 
+            basis_ls_a, 
+            basis_[a], 
+            l_splits[a], 
+            Ls[:num_Ls[a]], 
+            r2_l_cutoff, 
+            r2_cutoff[a], 
+            atom_start[a], 
+            max_l[a],
+        )
+    return np.transpose(ao, (0, 3, 1, 2))
+
+
+@njit(fastmath=True)
+def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cut, astart, max_l):
+    """
+    Calculate basis functions for one atom
+
+    ao: (1, nelec, nao) output array
+    rvec: (nelec, 3) atom-electron distances
+    basis_ls_a: (ncontractions,) l value for every Gaussian contraction in this atom's basis
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions in this atom's basis
+    l_split_a: (int) starting index for r_l_cutoff
+    Ls_a: (nL, 3) list of (sorted) lattice points to check for this atom
+    r2_l_cutoff: (ncontractions,) distance cutoff for each contraction
+    cut: (float) distance cutoff for this atom
+    astart: (int) starting index for ao
+    max_l: (int) max angular momentum l for this atom
+    """
+    if max_l == 2: sph_func = sph2_grad#hsh.SPH2
+    elif max_l == 3: sph_func = sph3_grad#hsh.SPH3
+    elif max_l == 4: sph_func = sph4_grad#hsh.SPH4
+    else: sph_func = sph5_grad#hsh.SPH5
+
+    rvec_L = np.zeros(3)
+    spherical = np.zeros((4, (max_l+1)**2))
+    nbas = np.sum(basis_ls_a * 2 + 1)
+    for e, v in enumerate(rvec):
+        for L in Ls_a:
+            r2 = 0
+            for i in range(3):
+                rvec_L[i] = v[i] - L[i]
+                r2 += rvec_L[i]**2
+            if r2 > cut: continue
+
+            sph_func(rvec_L, spherical)
+            reorder_p_grad(spherical)
+            # for some reason numba doesn't accept this
+            #sph_func(rvec_L[0], rvec_L[1], rvec_L[2], rvec_L[0]**2, rvec_L[1]**2, rvec_L[2]**2, spherical)
+            #spherical[1:4] = spherical[np.array([3, 1, 2])]
+
+            # this loops over all basis functions for the atom
+            b_ind = 0
+            for l_ind, l in enumerate(basis_ls_a):#[l_splits[a]:l_splits[a+1]]):
+                if r2 > r2_l_cutoff[l_split_a+l_ind]: 
+                    b_ind += 2*l+1
+                    continue
+                rad = single_radial_gto_lap(r2, rvec_L, basis_a[l_ind])
+                for b in range(2*l+1):
+                    ao[0, e, astart+b_ind, 0] += spherical[0, l*l+b] * rad[0]
+                    ao[0, e, astart+b_ind, 4] += spherical[0, l*l+b] * rad[4]
+                    for i in range(1, 4):
+                        ao[0, e, astart+b_ind, i] += spherical[i, l*l+b] * rad[0] + spherical[0, l*l+b] * rad[i]
+                        ao[0, e, astart+b_ind, 4] += 2 * spherical[i, l*l+b] * rad[i]
+                    b_ind += 1
+
+
 #@njit
 def _pbc_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls, kpts):
     """
@@ -343,6 +447,25 @@ def single_radial_gto_grad(r2, rvec, coeffs):
     return out
 
 
+@njit("float64[:](float64, float64[:], float64[:, :])", fastmath=True)
+def single_radial_gto_lap(r2, rvec, coeffs):
+    """
+    Evaluate gaussian contraction laplacian (vectorized for molecules)
+    r: (n, )
+    coeffs: (ncontract, 2)
+    l: int
+    returns (5, n, )"""
+    out = np.zeros(5)
+    for c in coeffs:
+        tmp = np.exp(-r2 * c[0]) * c[1]
+        out[0] += tmp
+        tmpx2xc = tmp * 2 * c[0]
+        for i in range(3):
+            out[i+1] +=  -tmpx2xc * rvec[i]
+        out[4] +=  tmpx2xc * (2*c[0] *r2 - 3)
+    return out
+
+ 
 @njit
 def max_distance_in_cell(lvecs):
     """
@@ -434,7 +557,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self.rcut = _estimate_rcut(cell, eval_gto_precision)#.max()
         Ls = cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
-        expcutoff = 15#-2.0*np.log(eval_gto_precision)
+        expcutoff = 25#-2.0*np.log(eval_gto_precision)
         print("expcutoff", expcutoff)
         self.num_Ls, self.atom_cutoff, self.l_cutoff = max_Ls(
             self.Ls, 
@@ -454,6 +577,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self.dtype = float if isgamma else complex
         self._gto_func = _pbc_eval_gto_gamma if isgamma else _pbc_eval_gto
         self._gto_func_grad = _pbc_eval_gto_gamma_grad# if isgamma else _pbc_eval_gto
+        self._gto_func_lap = _pbc_eval_gto_gamma_lap# if isgamma else _pbc_eval_gto
 
 
     def eval_gto(self, configs):
@@ -477,6 +601,23 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
     def eval_gto_grad(self, configs):
         rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
         ao = self._gto_func_grad(
+            rvec,
+            self.basis_ls, 
+            self.basis_arrays,
+            self.max_l,
+            self.splits,
+            self.l_splits,
+            self.Ls[:self.Lmax],
+            self.num_Ls,
+            self.l_cutoff,
+            self.atom_cutoff,
+            self.kpts,
+        )
+        return ao
+        
+    def eval_gto_lap(self, configs):
+        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
+        ao = self._gto_func_lap(
             rvec,
             self.basis_ls, 
             self.basis_arrays,

@@ -36,9 +36,12 @@ def compare_pyscf():
     coords = np.random.randn(n, 3) + np.array([0, 0, 0.5])
     orbitals = AtomicOrbitalEvaluator(mol)
 
-    f1 = lambda c: mol.eval_gto("GTOval_sph_deriv1", c)
+    def f1(c): 
+        x = mol.eval_gto("GTOval_sph_deriv2", c)
+        lap = np.sum(x[[4, 7, 9]], axis=0, keepdims=True)
+        return np.concatenate([x[:4], lap], axis=0)
     # compile functions
-    ao1 = orbitals.eval_gto_grad(OpenConfigs(coords))
+    ao1 = orbitals.eval_gto_lap(OpenConfigs(coords))
     ao0 = f1(coords)
 
     N = 20
@@ -47,7 +50,7 @@ def compare_pyscf():
         coords = np.random.randn(n, 3)*2 + np.array([0, 0, 0.5])
         configs = OpenConfigs(coords)
         tpys = timecall(f1, coords)
-        tpyq = timecall(orbitals.eval_gto_grad, configs)
+        tpyq = timecall(orbitals.eval_gto_lap, configs)
         dat["pyscf"][i] = tpys
         dat["new"][i] = tpyq
 

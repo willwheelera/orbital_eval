@@ -129,6 +129,45 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
     return np.transpose(ao, (1, 0, 2))
 
 
+@njit
+def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
+    """
+    all_rvec: (natom, nelec, 3) atom-electron distances
+    basis_ls: (ncontractions,) l value for every Gaussian contraction (concatenated together)
+    basis_arrays: (ngaussians, 2) contraction coefficients for all Gaussian contractions (concatenated together)
+    max_l: (natom,) max angular momentum l for each atom
+    splits: (ncontractions+1,) indexing for basis_arrays
+    l_splits: (natom+1,) indexing for basis_ls
+    """
+    nbas_tot = np.sum(2 * basis_ls + 1)
+    ao = np.zeros((nbas_tot, 5, all_rvec.shape[1]))
+    sel = 0
+    split = 0
+
+    for a, rvec in enumerate(all_rvec):
+        r2 = np.zeros(rvec.shape[0])
+        for e, v in enumerate(rvec):
+            for i in range(3):
+                r2[e] += v[i]**2
+        #r2 = np.sum(rvec**2, axis=-1)
+        spherical = eval_spherical_grad(max_l[a], rvec)
+        # this loops over all basis functions for the atom
+        b_ind = 0
+        for l in basis_ls[l_splits[a]:l_splits[a+1]]:
+            bas = basis_arrays[splits[split]:splits[split+1]]
+            rad = radial_gto_lap(r2, rvec, bas)
+            for b in range(2*l+1):
+                ao[sel+b_ind, 0] = spherical[l*l+b, 0] * rad[0]
+                ao[sel+b_ind, 4] = spherical[l*l+b, 0] * rad[4]
+                for i in range(1, 4):
+                    ao[sel+b_ind, i] = spherical[l*l+b, i] * rad[0] + spherical[l*l+b, 0] * rad[i]
+                    ao[sel+b_ind, 4] += 2 * spherical[l*l+b, i] * rad[i]
+                b_ind += 1
+            split += 1
+        sel += b_ind
+    return np.transpose(ao, (1, 0, 2))
+
+
 @njit("float64[:](float64[:], float64[:, :])", fastmath=True)
 def radial_gto(r2, coeffs):
     """
@@ -167,16 +206,15 @@ def radial_gto_lap(r2, rvec, coeffs):
     r: (n, )
     coeffs: (ncontract, 2)
     l: int
-    returns (4, n, )"""
-    out = np.zeros((7, r2.shape[0]))
+    returns (5, n, )"""
+    out = np.zeros((5, r2.shape[0]))
     for c in coeffs:
         tmp = np.exp(-r2 * c[0]) * c[1]
         out[0] += tmp
         tmpx2xc = tmp * 2 * c[0]
         for i in range(3):
-            x = rvec[:, i]
-            out[i+1] +=  -tmpx2xc * x
-            out[i+4] +=  tmpx2xc * (2*c[0] *x*x - 1)
+            out[i+1] +=  -tmpx2xc * rvec[:, i]
+        out[4] +=  tmpx2xc * (2*c[0] *r2 - 3)
     return out
 
  
@@ -298,6 +336,22 @@ class AtomicOrbitalEvaluator:
         # (natom, nconf, 3)
         rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
         ao = mol_eval_gto_grad(
+            rvec,
+            self.basis_ls, 
+            self.basis_arrays,
+            self.max_l,
+            self.splits,
+            self.l_splits,
+        )
+        return np.transpose(ao, (0, 2, 1))
+            
+    def eval_gto_lap(self, configs):
+        """
+        configs is (n, 3)
+        """
+        # (natom, nconf, 3)
+        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
+        ao = mol_eval_gto_lap(
             rvec,
             self.basis_ls, 
             self.basis_arrays,
