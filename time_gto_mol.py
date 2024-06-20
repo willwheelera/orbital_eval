@@ -70,10 +70,12 @@ def printout(mol, ao0, ao1, dat):
     #df = pd.DataFrame(df)
     #print(df[:50])
     #print(df[50:])
-    diff_norm = np.linalg.norm(ao0-ao1)
-    print("max diff", np.amax(np.abs(ao1-ao0)))
-    eps = 0.01
-    print(f"greater than {eps}", np.count_nonzero(np.abs(ao1-ao0)>eps))
+    labels = mol.ao_labels()
+
+    diff_norm = np.linalg.norm(ao0-ao1, axis=(1, 2))
+    print("max diff", np.amax(np.abs(ao1-ao0), axis=(1, 2)))
+    eps = 0.05
+    print(f"greater than {eps}", np.count_nonzero(np.abs(ao1-ao0)>eps, axis=(1, 2)))
     print("diff_norm", diff_norm)
     #assert diff_norm < 1e-2, df
 
