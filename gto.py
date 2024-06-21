@@ -29,10 +29,6 @@ def eval_spherical(max_l, rvec):
     out = np.zeros(((max_l + 1)**2, rvec.shape[0]))
 
     hsh.HARDCODED_SPH_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, out)
-    tmp = out[1].copy()
-    out[1] = out[3]
-    out[3] = out[2]
-    out[2] = tmp
     return out
     
 @njit(cache=False, fastmath=True)
@@ -48,10 +44,6 @@ def eval_spherical_grad(max_l, rvec):
     #hsh.HARDCODED_SPH_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, a)
     hsh.HARDCODED_SPH_DERIVATIVE_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, a, b, c, d)
     out = np.transpose(out, (1, 0, 2))
-    tmp = out[ 1].copy()
-    out[ 1] = out[ 3]
-    out[ 3] = out[ 2]
-    out[ 2] = tmp
     return out
     
 

@@ -26,20 +26,6 @@ import gto
 #from gto import sph2, sph3, sph4, sph5
 
 
-@njit
-def reorder_p(out):
-    tmp = out[1] # the code I found uses the wrong p-orbital order
-    out[1] = out[3]
-    out[3] = out[2]
-    out[2] = tmp
-
-@njit
-def reorder_p_grad(out):
-    tmp = out[:, 1].copy() # the code I found uses the wrong p-orbital order
-    out[:, 1] = out[:, 3]
-    out[:, 3] = out[:, 2]
-    out[:, 2] = tmp
-
 """
 Wrappers for hsh.SPHn: evaluate spherical harmonics through l=2
 v: (3,) vector to evaluate
@@ -166,7 +152,6 @@ def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cu
 
             phases_j = phases[j]
             sph_func(rvec_L, spherical)
-            reorder_p(spherical)
             # for some reason numba doesn't accept this
             #sph_func(rvec_L[0], rvec_L[1], rvec_L[2], rvec_L[0]**2, rvec_L[1]**2, rvec_L[2]**2, spherical)
             #spherical[1:4] = spherical[np.array([3, 1, 2])]
@@ -266,7 +251,6 @@ def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutof
 
             phases_j = phases[j]
             sph_func(rvec_L, spherical)
-            reorder_p_grad(spherical)
             # for some reason numba doesn't accept this
             #sph_func(rvec_L[0], rvec_L[1], rvec_L[2], rvec_L[0]**2, rvec_L[1]**2, rvec_L[2]**2, spherical)
             #spherical[1:4] = spherical[np.array([3, 1, 2])]
@@ -370,7 +354,6 @@ def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff
 
             phases_j = phases[j]
             sph_func(rvec_L, spherical)
-            reorder_p_grad(spherical)
             # for some reason numba doesn't accept this
             #sph_func(rvec_L[0], rvec_L[1], rvec_L[2], rvec_L[0]**2, rvec_L[1]**2, rvec_L[2]**2, spherical)
             #spherical[1:4] = spherical[np.array([3, 1, 2])]
