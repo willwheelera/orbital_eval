@@ -20,7 +20,7 @@ from pbcgto import PeriodicAtomicOrbitalEvaluator
 from time_gto_mol import printout
 from pyscf.pbc import gto
 
-precision = 1e-2
+precision = 1e-6
 
 def generate_mol():
     L = 4.168

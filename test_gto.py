@@ -124,7 +124,7 @@ def run_tests(bc="molecule"):
         orbgrad = lambda x: orbitals.eval_gto_grad(configs(x))[0, 1:]
         orblap = lambda x: orbitals.eval_gto_lap(configs(x))[0, 4]
     print("orbitals")
-    #print(test_gradient(orbval, orbgrad))
+    print(test_gradient(orbval, orbgrad))
     print(test_laplacian(orbgrad, orblap))
 
     #labels = mol.ao_labels()

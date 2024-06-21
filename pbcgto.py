@@ -557,7 +557,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self.rcut = _estimate_rcut(cell, eval_gto_precision)#.max()
         Ls = cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
-        expcutoff = 25#-2.0*np.log(eval_gto_precision)
+        expcutoff = 20#-2.0*np.log(eval_gto_precision)
         print("expcutoff", expcutoff)
         self.num_Ls, self.atom_cutoff, self.l_cutoff = max_Ls(
             self.Ls, 
