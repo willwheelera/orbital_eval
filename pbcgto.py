@@ -459,10 +459,9 @@ def single_radial_gto_lap(r2, rvec, coeffs):
     for c in coeffs:
         tmp = np.exp(-r2 * c[0]) * c[1]
         out[0] += tmp
-        tmpx2xc = tmp * 2 * c[0]
         for i in range(3):
-            out[i+1] +=  -tmpx2xc * rvec[i]
-        out[4] +=  tmpx2xc * (2*c[0] *r2 - 3)
+            out[i+1] +=  -tmp*2*c[0] * rvec[i]
+        out[4] +=  tmp*2*c[0] * (2*c[0] *r2 - 3)
     return out
 
  
