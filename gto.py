@@ -218,6 +218,55 @@ def radial_gto_lap(r2, rvec, coeffs):
     return out
 
  
+@njit("float64(float64, float64[:, :])", fastmath=True)
+def single_radial_gto(r2, coeffs):
+    """
+    r2: float
+    coeffs: (ncontract, 2)
+    l: int
+    returns: float"""
+    out = 0.
+    for c in coeffs:
+        out += np.exp(-r2 * c[0]) * c[1]
+    return out
+
+
+@njit("float64[:](float64, float64[:], float64[:, :])", fastmath=True)
+def single_radial_gto_grad(r2, rvec, coeffs):
+    """
+    Value (0) and three gradient components (1, 2, 3)
+    r2: float
+    rvec: (3,)
+    coeffs: (ncontract, 2)
+    l: int
+    returns: (4,)"""
+    out = np.zeros(4)
+    for c in coeffs:
+        tmp = np.exp(-r2 * c[0]) * c[1]
+        out[0] += tmp
+        for i in range(3):
+            out[i+1] +=  -tmp * c[0] * 2 * rvec[i]
+    return out
+
+
+@njit("float64[:](float64, float64[:], float64[:, :])", fastmath=True)
+def single_radial_gto_lap(r2, rvec, coeffs):
+    """
+    Evaluate gaussian contraction laplacian (vectorized for molecules)
+    r: (n, )
+    coeffs: (ncontract, 2)
+    l: int
+    returns (5, n, )"""
+    out = np.zeros(5)
+    for c in coeffs:
+        tmp = np.exp(-r2 * c[0]) * c[1]
+        out[0] += tmp
+        for i in range(3):
+            out[i+1] +=  -tmp*2*c[0] * rvec[i]
+        out[4] +=  tmp*2*c[0] * (2*c[0] *r2 - 3)
+    return out
+
+ 
 def compute_basis_norms(basis):
     """
     https://pyscf.org/pyscf_api_docs/pyscf.gto.html#pyscf.gto.mole.gto_norm

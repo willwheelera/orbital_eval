@@ -20,7 +20,7 @@ from pbcgto import PeriodicAtomicOrbitalEvaluator
 from time_gto_mol import printout
 from pyscf.pbc import gto
 
-precision = 1e-6
+precision = 1e-4
 
 def generate_mol():
     L = 4.168
@@ -61,10 +61,12 @@ def compare_pbc_pyscf():
     lvecs = mol.lattice_vectors()
     n = 500
     coords, _ = enforce_pbc(lvecs, np.random.randn(n, 3)*2 + np.array([0, 0, 0.5]))
-    orbitals = PeriodicAtomicOrbitalEvaluator(mol, kpts=np.zeros((1, 3)), eval_gto_precision=precision)
+    #kpts = np.zeros((1,3)) # for Gamma point test
+    kpts = np.pi * np.mgrid[:2,:2,:2].reshape(3, -1).T @ np.linalg.inv(mol.lattice_vectors()) # for complex test
+    orbitals = PeriodicAtomicOrbitalEvaluator(mol, kpts=kpts, eval_gto_precision=precision)
     #f1 = lambda c: np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph_deriv1", c, kpts=np.zeros((1, 3)), Ls=orbitals.Ls))
     def f1(c): 
-        x = np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph_deriv2", c, kpts=np.zeros((1, 3)), Ls=orbitals.Ls))
+        x = np.asarray(gto.eval_gto.eval_gto(mol, "PBCGTOval_sph_deriv2", c, kpts=kpts, Ls=orbitals.Ls))
         lap = np.sum(x[0, [4, 7, 9]], axis=0, keepdims=True)
         return np.concatenate([x[0, :4], lap], axis=0)
             
