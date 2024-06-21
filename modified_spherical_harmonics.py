@@ -84,9 +84,7 @@ def COMPUTE_SPH_DERIVATIVE_L1( sph_i, dx_sph_i, dy_sph_i, dz_sph_i,):
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L2(
-    x, y, z, x2, y2, z2, sph_i,
-):
+def COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,):
     sph_i[(4)] = 1.0925484305920792 * x * y
     sph_i[(7)] = 1.0925484305920792 * x * z
     sph_i[(5)] = 1.0925484305920792 * y * z
@@ -133,26 +131,16 @@ def COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,):
 def COMPUTE_SPH_DERIVATIVE_L3(
     x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
 ):
-    #sph_i[(4)] = 1.0925484305920792 * x * y
-    #sph_i[(7)] = 1.0925484305920792 * x * z
-    #sph_i[(5)] = 1.0925484305920792 * y * z
-    #sph_i[(6)] = -(0.315391565252520) * (x2 + y2 - 2 * z2)
-    #sph_i[(8)] = (0.54627421529604) * (x2 - y2)
-
     dx_sph_i[(9)] = (3.24037034920393) * sph_i[(4)]
     dx_sph_i[(10)] = (2.64575131106459) * sph_i[(5)]
     dx_sph_i[(11)] = -(0.83666002653408) * sph_i[(4)]
     dx_sph_i[(12)] = -(2.04939015319192) * sph_i[(7)]
-    #dx_sph_i[(13)] = -(0.91409159892893) * (x2+y2 -2* z2 + .5 * (x2-y2))
-    #dx_sph_i[(13)] = -(a) * (1/b * (-b)(x2+y2 -2* z2) + .5 *1/c * c(x2-y2))
-    #dx_sph_i[(13)] = (a * .5/c) * (2c/b * (b)(x2+y2 -2* z2) - c(x2-y2))
     dx_sph_i[(13)] = (0.8366600265340735) * (-sph_i[(8)] + (3.464101615137758) * sph_i[(6)])
     dx_sph_i[(14)] = (2.64575131106459) * sph_i[(7)]
     dx_sph_i[(15)] = (3.24037034920393) * sph_i[(8)]
 
     dy_sph_i[(9)] = dx_sph_i[(15)]
     dy_sph_i[(10)] = dx_sph_i[(14)]
-    #dy_sph_i[(11)] = -(0.91409159892893) * (x2+y2 - 2*z2 - 0.5 * (x2-y2))
     dy_sph_i[(11)] = (0.8366600265340735) * (sph_i[(8)] + (3.464101615137758) * sph_i[(6)])
     dy_sph_i[(12)] = -(2.04939015319192) * sph_i[(5)]
     dy_sph_i[(13)] = -(0.83666002653408) * sph_i[(4)]
@@ -169,15 +157,7 @@ def COMPUTE_SPH_DERIVATIVE_L3(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L4(
-    x,
-    y,
-    z,
-    x2,
-    y2,
-    z2,
-    sph_i,
-):
+def COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,):
     sph_i[(16)] = (4.194391357527674) * sph_i[(4)] * sph_i[(8)]
     sph_i[(17)] = 3 * z * sph_i[(9)]
     tmp = -(0.866025403784439) * (x2 + y2 - 6 * z2)
@@ -189,46 +169,19 @@ def COMPUTE_SPH_L4(
     tmp = -(1.224744871391589) * (z2 - (4.755992757127213) * sph_i[(6)])
     sph_i[(19)] = sph_i[(5)] * tmp
     sph_i[(21)] = sph_i[(7)] * tmp
-    # fxz * (-a) * (z2 - b * (-e)(3z2-r2))
-    # afz * x * (-z2 - b * e(3z2-r2))
-    # afz * x * (-z2 - 1.5(2z2-x2-y2))
-    # afz * x * (-4z2 + 1.5(x2+y2))
-    # afz * (-4xz2 + 1.5(x3+xy2))
-    # ddx
-    # afz * [ -4z2 + 4.5x2+1.5y2 ]
-    # afz * [ -4z2 + 3(x2+y2) + 1.5 * (x2-y2) ]
-
-    # fz * (-a) * (z2 - b * e(3z2-r2)) + fxz * (-a) * ( - b * e(-2x))
-    # fz * (-a) * (z2 - b * e(3z2-r2)) + fxz * (-a * b * e2x)
-    # -a*f*z * z2 +afz* 1.5(3z2-r2) - afz *x2 * 2*1.5
-    # -a*f*z * (z2 - 1.5(3z2-r2) -  x2 * 2*1.5)
-    # -a*f*z * (z2 - 1.5(2z2-x2-y2) -  x2 * 3)
-    # -a*f*z * (z2 - 3z2 + 1.5x2 + 1.5y2 -  3x2)
-    # -a*f*z * ( -2z2 - 1.5(x2 -y2))
-    # 2a*f*z * ( z2  .75/b * b(x2 -y2))
     sph_i[(23)] = 3 * z * sph_i[(15)]
     sph_i[(24)] = -(1.060660171779821) * (y * sph_i[(9)] - x * sph_i[(15)])
 
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L4(
-    x,
-    y,
-    z,
-    x2,
-    y2,
-    z2,
-    sph_i,
-    dx_sph_i,
-    dy_sph_i,
-    dz_sph_i,
+    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
 ):
     dx_sph_i[(16)] = (4.242640687119285) * sph_i[(9)]
     dx_sph_i[(17)] = (3.674234614174767) * sph_i[(10)]
     dx_sph_i[(18)] = (1.892349391515120) * y * (y2 + (4.755992757127213) * sph_i[(6)])
     dx_sph_i[(19)] = -(1.388730149658827) * sph_i[(10)]
     dx_sph_i[(20)] = -(2.777460299317654) * sph_i[(13)]
-    dx_sph_i[(21)] = -1.3380930871145784 * z * (-2*z2 + 4.5 * x2 + 1.5 * y2)
     dx_sph_i[(21)] = 2.676186174229157 * z * (z2 - 2.25 * x2 - .75 * y2)
     dx_sph_i[(22)] = -(1.892349391515120) * x * (x2 - 3 * z2)
     dx_sph_i[(23)] = (3.674234614174767) * sph_i[(14)]
@@ -258,15 +211,7 @@ def COMPUTE_SPH_DERIVATIVE_L4(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L5(
-    x,
-    y,
-    z,
-    x2,
-    y2,
-    z2,
-    sph_i,
-):
+def COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,):
     sph_i[(25)] = (
         (13.12764113680340)
         * y
@@ -292,16 +237,7 @@ def COMPUTE_SPH_L5(
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L5(
-    x,
-    y,
-    z,
-    x2,
-    y2,
-    z2,
-    sph_i,
-    dx_sph_i,
-    dy_sph_i,
-    dz_sph_i,
+    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
 ):
     dx_sph_i[(25)] = (5.244044240850758) * sph_i[(16)]
     dx_sph_i[(26)] = (4.690415759823430) * sph_i[(17)]
@@ -368,15 +304,7 @@ def COMPUTE_SPH_DERIVATIVE_L5(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L6(
-    x,
-    y,
-    z,
-    x2,
-    y2,
-    z2,
-    sph_i,
-):
+def COMPUTE_SPH_L6( x, y, z, x2, y2, z2, sph_i,):
     sph_i[(36)] = (3.924637560539857) * sph_i[(9)] * sph_i[(15)]
     tmp = (3.605551275463989) * z
     sph_i[(37)] = tmp * sph_i[(25)]
@@ -408,16 +336,7 @@ def COMPUTE_SPH_L6(
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L6(
-    x,
-    y,
-    z,
-    x2,
-    y2,
-    z2,
-    sph_i,
-    dx_sph_i,
-    dy_sph_i,
-    dz_sph_i,
+    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
 ):
     dx_sph_i[(36)] = (6.244997998398398) * sph_i[(25)]
     dy_sph_i[(48)] = -dx_sph_i[(36)]
