@@ -16,7 +16,7 @@
 import numpy as np
 import scipy.special
 from numba import njit, jit
-import hardcoded_spherical_harmonics as hsh
+import modified_spherical_harmonics as hsh
 
 
 @njit(cache=False, fastmath=True)
