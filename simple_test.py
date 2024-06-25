@@ -21,7 +21,8 @@ from pyscf.pbc.gto.cell import estimate_rcut, _extract_pgto_params
 from pyscf.pbc.gto.cell import _estimate_rcut as _estimate_rcut_pyscf
 from pyscf.gto import mole
 import hardcoded_spherical_harmonics as hsh
-from gto import PeriodicAtomicOrbitalEvaluator, radial_gto, single_radial_gto
+from gto import radial_gto, single_radial_gto
+from pbcgto import PeriodicAtomicOrbitalEvaluator
 
 
 @njit(fastmath=True)
